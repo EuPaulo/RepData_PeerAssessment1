@@ -5,21 +5,181 @@ output:
     keep_md: true
 ---
 
+Loading packages to be used:
+```{r}
+library(lubridate)
+library(dplyr)
+library(lattice)
+```
+
+As I'm from Brazil, week days labels would change if I didn't set the system locale:
+```{r}
+Sys.setlocale("LC_TIME","C") 
+```
+
 
 ## Loading and preprocessing the data
+Loading data:
+```{r}
+dados<-read.csv("activity.csv", h = T)
+```
 
+Transforming date to `POSIXct` class:
+```{r}
+dados<-transform(dados, date = ymd(date))
+```
+
+Wrapping the data frame in a dplyr tbl_df:
+```{r}
+dados<-tbl_df(dados)
+```
 
 
 ## What is mean total number of steps taken per day?
+Grouping data by date (using dplyr package):
+```{r}
+tsdados<-summarise(group_by(dados,date), sum(steps, na.rm = T))
+names(tsdados)<-c("date", "sumSteps")
+```
 
+Mean and median of total number of steps per day:
+```{r}
+mean(tsdados$sumSteps)
+median(tsdados$sumSteps)
+```
+
+So, the mean of total numer of steps per day is `r mean(tsdados$sumSteps)` and it's median is `r median(tsdados$sumSteps)`.
+
+To illustrate all this, here comes a histogram:
+```{r}
+hist(tsdados$sumSteps, breaks = 30, xlab = "Total number of steps per day", main = NULL)
+```
 
 
 ## What is the average daily activity pattern?
 
+Grouping data by interval:
+```{r}
+daDados<-summarise(group_by(dados,interval), mean(steps, na.rm = T))
+names(daDados)<-c("interval","meanSteps")
+```
 
+Time series plot of 5-minute intervals and average number of steps per day:
+```{r}
+plot(daDados$interval, daDados$meanSteps, type = "l", xlab = "5-minute intervals", ylab = "Average number of steps")
+```
+
+
+Interval that contains, on average, the maximum number of steps:
+
+```{r}
+daDados[daDados$meanSteps == max(daDados$meanSteps),]$interval
+```
+
+
+
+So, the interval then interval that contains, on average, the maximum number of steps is ```r daDados[daDados$meanSteps == max(daDados$meanSteps),]$interval```, with an average number of steps = ```r daDados[daDados$meanSteps == max(daDados$meanSteps),]$meanSteps```.
 
 ## Imputing missing values
+Calculating total number of missing values in the data set:
+
+```{r}
+sum(is.na(dados$steps))
+```
+
+The total number of missing values (```r "NA" ```) in this data set is ```r sum(is.na(dados$steps))```.
+
+
+Function for imputing missing values in the data set.
+```{r}
+imputation<-function (dataframe){
+    vetor = vector()
+    
+    for (linha in 1:nrow(dataframe)){
+        passos=dataframe[linha,]$steps
+            
+        if (is.na(passos)){
+            intervalo = dataframe[linha,]$interval
+            x = daDados[daDados$interval == intervalo,]$meanSteps
+            vetor<-append(vetor, x)
+        }
+        
+        else {
+            vetor<-append(vetor, passos)
+        }
+    }
+    
+    novoDataframe<-mutate(dataframe, steps = vetor)
+    novoDataframe    
+}
+
+```
+
+
+New data set, equal to original, with missing data filled in:
+```{r}
+dadosComp<-imputation(dados)
+```
+
+
+
+Grouping data by date (using dplyr package):
+```{r}
+tsDadosComp<-summarise(group_by(dadosComp,date), sum(steps))
+names(tsDadosComp)<-c("date", "sumSteps")
+```
+
+
+Mean and median of total number of steps per day:
+```{r}
+mean(tsDadosComp$sumSteps)
+median(tsDadosComp$sumSteps)
+```
+
+So, the mean of total numer of steps per day is `r mean(tsDadosComp$sumSteps)` and it's median is `r median(tsDadosComp$sumSteps)`.
+
+To illustrate all this, here comes a histogram:
+```{r}
+hist(tsDadosComp$sumSteps, breaks = 30, xlab = "Total number of steps per day", main = NULL)
+```
+
+######Falta resposta
+
 
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+
+Function to detect weekend or weekday
+```{r}
+weekend<- function(data){
+    dia<-weekdays(data)
+    if (dia == "Saturday" | dia == "Sunday"){
+        dia = "weekend"
+    }
+    else {
+        dia = "weekday"
+    }
+    dia
+}
+    
+```
+
+Creating a new factor variable in the data frame:
+```{r}
+dadosWeek<-mutate(dadosComp, week = factor(do.call(rbind, lapply(dadosComp$date, weekend))))
+```
+
+Grouping data by time interval and weekday factor ("week"), and extracting mean:
+```{r}
+tsDadosWeek<-summarise(group_by(dadosWeek, week, interval), mean(steps))
+names(tsDadosWeek)<-c("week", "interval", "steps")
+```
+
+Plotting:
+```{r}
+xyplot(steps ~ interval | week, data = tsDadosWeek, layout = c(1,2), type = "l", xlab = "Interval", ylab = "Number of steps")
+```
+
+
